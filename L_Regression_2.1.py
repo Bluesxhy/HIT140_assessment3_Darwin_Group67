@@ -67,3 +67,8 @@ if not corr_flags and vif_flags.empty:
 else:
     print("Screening result: REVIEW - investigate the flagged correlations and/or VIF values.")
 
+# ---------- 2. outliers in the response (1.5 x IQR rule) ----------
+q1, q3 = y.quantile([.25, .75]); lo, hi = q1 - 1.5*(q3-q1), q3 + 1.5*(q3-q1)
+out = d[(y < lo) | (y > hi)]
+print(f"\nResponse outlier fences: [{lo:.1f}, {hi:.1f}]  -> {len(out)} outlying matches:")
+print(out[["fifa_match_no","team_A","team_B","goal_difference"]].to_string(index=False))
