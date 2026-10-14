@@ -101,3 +101,18 @@ for s in range(20):
     rm.append(np.sqrt(np.mean((y-pr)**2))); ba.append(np.sqrt(np.mean((y-pb)**2))); r2.append(r2_score(y, pr))
 print(f"\nRepeated 5-fold CV: RMSE = {np.mean(rm):.3f} | baseline RMSE = {np.mean(ba):.3f} | CV R2 = {np.mean(r2):.3f}")
 
+# ---------- 6. sensitivity: refit without the outlying matches ----------
+keep = ~((y < lo) | (y > hi)); f2 = sm.OLS(y[keep], sm.add_constant(X[keep])).fit()
+print(f"Without {int((~keep).sum())} outlying matches: n={int(keep.sum())}, R2={f2.rsquared:.3f}, adjR2={f2.rsquared_adj:.3f}")
+
+# ---------- 7. symmetry check (swap Team A and Team B) ----------
+fs = sm.OLS(-y, sm.add_constant(-X)).fit()
+print("Swap check - max |slope difference| =", float(np.abs(fit.params[feats] - fs.params[feats]).max()))
+
+# ---------- plots ----------
+cvp = cross_val_predict(LinearRegression(), X, y, cv=KFold(5, shuffle=True, random_state=1))
+plt.figure(figsize=(6,5)); plt.scatter(cvp, y, alpha=.7); plt.plot([-5,6.5],[-5,6.5],"r--")
+plt.xlabel("Predicted goal difference (cross-validated)"); plt.ylabel("Actual goal difference"); plt.title("Actual vs Predicted"); plt.tight_layout(); plt.show()
+plt.figure(figsize=(6,4.5)); plt.scatter(fit.fittedvalues, fit.resid, alpha=.7); plt.axhline(0, color="r", ls="--")
+plt.xlabel("Fitted values"); plt.ylabel("Residuals"); plt.title("Residuals vs Fitted"); plt.tight_layout(); plt.show()
+sm.qqplot(fit.resid, line="s"); plt.title("Normal Q-Q Plot of Residuals"); plt.tight_layout(); plt.show()
