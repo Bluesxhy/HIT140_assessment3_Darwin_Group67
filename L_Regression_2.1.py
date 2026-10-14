@@ -72,3 +72,32 @@ q1, q3 = y.quantile([.25, .75]); lo, hi = q1 - 1.5*(q3-q1), q3 + 1.5*(q3-q1)
 out = d[(y < lo) | (y > hi)]
 print(f"\nResponse outlier fences: [{lo:.1f}, {hi:.1f}]  -> {len(out)} outlying matches:")
 print(out[["fifa_match_no","team_A","team_B","goal_difference"]].to_string(index=False))
+
+# ---------- 3. 80/20 train-test split, evaluation with the course metrics ----------
+Xtr, Xte, ytr, yte = train_test_split(X, y, test_size=0.2, random_state=42)
+lr = LinearRegression().fit(Xtr, ytr); base = DummyRegressor().fit(Xtr, ytr)
+adj = lambda r2, n_, p_: 1 - (1 - r2) * (n_ - 1) / (n_ - p_ - 1)
+def metrics(model, A, b):
+    pr = model.predict(A); mse = mean_squared_error(b, pr); rmse = np.sqrt(mse)
+    return dict(MAE=mean_absolute_error(b, pr), MSE=mse, RMSE=rmse, NRMSE=rmse/(y.max()-y.min()), R2=r2_score(b, pr))
+tr_m, te_m, ba_m = metrics(lr, Xtr, ytr), metrics(lr, Xte, yte), metrics(base, Xte, yte)
+print(f"\nTrain n={len(Xtr)}, test n={len(Xte)}")
+print(pd.DataFrame({"train": tr_m, "test": te_m, "baseline(test)": ba_m}).round(3).to_string())
+print(f"Adjusted R2: train = {adj(tr_m['R2'], len(Xtr), p):.3f}")
+
+# ---------- 4. full-data OLS: coefficients, significance, assumptions ----------
+fit = sm.OLS(y, sm.add_constant(X)).fit(); print("\n", fit.summary())
+print(f"\nR2 = {fit.rsquared:.4f} | Adj R2 = {fit.rsquared_adj:.4f} | F = {fit.fvalue:.3f} (p = {fit.f_pvalue:.2e})")
+print("Shapiro p =", round(stats.shapiro(fit.resid).pvalue, 4), "| Breusch-Pagan p =", round(het_breuschpagan(fit.resid, sm.add_constant(X))[1], 4),
+      "| Durbin-Watson =", round(sm.stats.durbin_watson(fit.resid), 3))
+z = (X - X.mean()) / X.std(ddof=1); zf = sm.OLS((y - y.mean())/y.std(ddof=1), sm.add_constant(z)).fit()
+print("\nStandardised coefficients:\n", pd.DataFrame({"beta": zf.params[feats], "p": zf.pvalues[feats]}).round(3).to_string())
+
+# ---------- 5. stability: repeated 5-fold CV ----------
+rm, ba, r2 = [], [], []
+for s in range(20):
+    cv = KFold(5, shuffle=True, random_state=s)
+    pr = cross_val_predict(LinearRegression(), X, y, cv=cv); pb = cross_val_predict(DummyRegressor(), X, y, cv=cv)
+    rm.append(np.sqrt(np.mean((y-pr)**2))); ba.append(np.sqrt(np.mean((y-pb)**2))); r2.append(r2_score(y, pr))
+print(f"\nRepeated 5-fold CV: RMSE = {np.mean(rm):.3f} | baseline RMSE = {np.mean(ba):.3f} | CV R2 = {np.mean(r2):.3f}")
+
